@@ -62,7 +62,7 @@ python-dateutil==2.7.3
 python-keyczar==0.716
 python3-keyczar==0.71rc0
 pytz==2018.5
-PyYAML==3.13
+PyYAML==5.1
 raven==6.9.0
 requests==2.18.4
 six==1.11.0
