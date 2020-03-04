@@ -1,0 +1,641 @@
+{% extends 'base.html' %}
+{% load bootstrap4 %}
+{% load static %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+{% bootstrap_messages %}
+
+
+{% block ExtraHead %}
+    <link href="{% static 'css/select2.min.css' %}" rel="stylesheet"/>
+    <link href="{% static 'css/bootstrap-datepicker.min.css' %}" rel="stylesheet"/>
+    <link href="{% static 'css/style.css' %}" rel="stylesheet"/>
+    <link href="{% static 'css/instructions/new_instruction.css' %}" rel="stylesheet"/>
+    <link rel="stylesheet" href="{% static 'assets/kartik-v-boostrap-fileinput/css/fileinput.css' %}">
+    <link rel="stylesheet" href="{% static 'assets/kartik-v-boostrap-fileinput/themes/explorer-fas/theme.css' %}">
+    <script src="{% static 'assets/kartik-v-boostrap-fileinput/js/fileinput.js' %}"></script>
+    <script src="{% static 'assets/kartik-v-boostrap-fileinput/js/locales/LANG.js' %}"></script>
+    <script src="{% static 'assets/kartik-v-boostrap-fileinput/themes/fas/theme.js' %}"></script>
+{% endblock %}
+
+{% block Content %}
+    <form method="POST" enctype="multipart/form-data" id="newInstructionForm">
+        {% csrf_token %}
+        <input type="hidden" id="instruction_id" name="instruction_id" value="{{ instruction_id }}" />
+        <div class="card-deck instruction">
+            <div class="pr-0 {% if request.user.type == 'CLT' %} col-md-6 {% else %} col-md-12 {% endif %}">
+                <div class="card mr-2">
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Patient</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-2 rowTitle">Name*:</div>
+                            {% bootstrap_field patient_form.patient_title size='small' form_group_class='form-group col-md-2 p-0' %}
+                            {% bootstrap_field patient_form.patient_first_name size='small' form_group_class='form-group col-md-4 px-2' placeholder='' %}
+                            {% bootstrap_field patient_form.patient_last_name size='small' form_group_class='form-group col-md-4 px-1' placeholder='' %}
+                        </div>
+                        <div class="row">
+                            <div class="col-md-2 rowTitle">Date of Birth*:</div>
+                            {% bootstrap_field patient_form.patient_dob_day size='small' show_label=True %}
+                            {% bootstrap_field patient_form.patient_dob_month size='small' show_label=True%}
+                            {% bootstrap_field patient_form.patient_dob_year size='small'  show_label=True %}
+                        </div>
+                        <div class="row">
+                            <div class="col-md-2 rowTitle">Address*:</div>
+                            {% bootstrap_field patient_form.patient_postcode size='small' form_group_class='form-group col-md-4 p-0 ' %}
+                            {% bootstrap_field patient_form.patient_address_number size='small' form_group_class='form-group col-md-6 px-1' %}
+                        </div>
+                        <div class="row" >
+                              {% bootstrap_field patient_form.patient_address_line1 size='small' form_group_class='form-group col-md-5 offset-md-2 p-0' placeholder='' %}
+                              {% bootstrap_field patient_form.patient_address_line2 size='small' form_group_class='form-group col-md-5' placeholder='' %}
+                              {% bootstrap_field patient_form.patient_address_line3 size='small' form_group_class='form-group col-md-5 offset-md-2 p-0' placeholder='' %}
+                              {% bootstrap_field patient_form.patient_city size='small' form_group_class='form-group col-md-5' placeholder='' %}
+                        </div>
+                        <div class="row" >
+                              {% bootstrap_field patient_form.patient_country size='small' form_group_class='form-group col-md-5 offset-md-2 p-0' placeholder='' %}
+                        </div>
+                        <div class="row">
+                            <div class="col-md-2 rowTitle">NHS #:</div>
+                            {% bootstrap_field patient_form.patient_nhs_number size='small' form_group_class='form-group col-md-4 p-0 mt-1' show_label=False placeholder='' %}
+                            {% if request.user.type == 'CLT' %}
+                                <div class="col-md-2 pl-4 rowTitle">Email:</div>
+                                {% bootstrap_field patient_form.patient_email size='small' form_group_class='form-group input-group col-md-4 px-1' show_label=False placeholder='' %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% if request.user.type == 'CLT' %}
+                <div class="col-md-6 ">
+                    <div class="card ">
+                        <div class="card-header"><h5>GP and GP Practice</h5></div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 rowTitle">Search GP Practice:</div>
+                                {% bootstrap_field nhs_form.gp_practice size='small' form_group_class='form-group col-md-6 p-0' show_label=False %}
+                                <input type="hidden" name="gp_practice_name" id="id_gp_practice_name" />
+                            </div>
+                            <div class="row " style="height: 130px">
+                                <div class="col-md-3 d-flex">GP Practice*:</div>
+                                <div class="col-md-6 p-0"><p id="nhsData"></p></div>
+                            </div>
+                            <div class="row ">
+                                <div class="col-md-3 rowTitle">Named GP:</div>
+                                {% bootstrap_field gp_form.gp_title size='small' form_group_class='form-group col-md-2 p-0' %}
+                                {% bootstrap_field gp_form.initial size='small' form_group_class='form-group col-md-3 px-2' %}
+                                {% bootstrap_field gp_form.gp_last_name size='small' form_group_class='form-group col-md-4 px-2' %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-12 mt-4">
+                    <div class="card">
+                        <div class="card-header"><h5>Scope</h5></div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-2 d-flex">Type of Instruction*:</div>
+                                {% bootstrap_field scope_form.type size='small' form_group_class='form-group col-md-6 p-0' show_label=False %}
+                            </div>
+                            <div class="row">
+                                <div class="col-md-2 rowTitle">Set from Template?</div>
+                                {% bootstrap_field scope_form.template size='small' form_group_class='form-group col-md-6 px-0' show_label=False %}
+                                {% bootstrap_button 'Set conditions' button_type="button" extra_classes='btn-xs' id='save_from_template_btn' %}
+                            </div>
+                            <div class="row" id="date_range">
+                                <div class="col-md-2 rowTitle">Medical reports date range</div>
+                                {% bootstrap_field scope_form.date_range_from size='small' form_group_class='form-group col-md-2 p-0 input-group dob' show_label=False %}
+                                {% bootstrap_field scope_form.date_range_to size='small'  form_group_class='form-group col-md-2 input-group dob' show_label=False %}
+                            </div>
+                            <div class="conditions d-none">
+                                <div class="row">
+                                    <div class="col-md-2 rowTitle" >Common Conditions of Interest*:</div>
+                                    {% for checkbox in scope_form.common_condition %}
+
+                                    {% endfor %}
+                                    {% bootstrap_field scope_form.common_condition size='small' form_group_class='form-group col-md-10 p-0 commonConditions' show_label=False %}
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-2 rowTitle">Addition Conditions of Interest*:</div>
+                                    {% bootstrap_field scope_form.addition_condition size='small' form_group_class='form-group col-md-6 p-0' show_label=False %}
+                                    {{scope_form.addition_condition_title}}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-12 mt-4">
+                    <div class="card">
+                        <div class="card-header"><h5>References</h5></div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-2">Your reference:</div>
+                                {% bootstrap_field reference_form.your_ref size='small' form_group_class='form-group col-md-4' show_label=False placeholder='' %}
+                                <div class="col-md-2">MediRef:</div>
+                                {% bootstrap_field reference_form.medi_ref size='small' form_group_class='form-group col-md-4' show_label=False %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-12 mt-4">
+                    <div class="card">
+                        <div class="card-header"><h5>Consent and Patient Copy</h5></div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-2 rowTitle">Upload consent form:</div>
+                                <div class="col-md-10">
+                                    <div class="form-group">
+                                        <div class="file-loading">
+                                            {% bootstrap_field scope_form.consent_form show_label=False %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            {% bootstrap_field scope_form.send_to_patient size='small' form_group_class='form-group offset-md-2 col-md-6 p-0' show_label=False %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-12 mt-4">
+                    <div class="card">
+                        <div class="card-header"><h5>Addition Question</h5></div>
+                        <div class="card-body">
+                            <div class="row" id="questions_block">
+                                {{ addition_question_formset.management_form }}
+                                <table border="0" cellpadding="10" cellspacing="0" class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Questions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for form in addition_question_formset.forms %}
+                                        <tr>
+                                            <td>{{ form.question }}</td>
+                                            <td></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+            <div class="col-md-4 mt-4">
+                <button class="btn btn-primary btn-lg w-75" type="submit" id="submit-all">Submit</button>
+            </div>
+            {% if request.user.type == 'CLT' %}
+                <div class="col-md-4 mt-4">
+                    <button class="btn btn-primary btn-lg w-75" id="template_modal_btn" type="button" data-toggle="modal" disabled="true">Save as template</button>
+                </div>
+            {% endif %}
+    </form>
+
+    <!-- Create Template Modal -->
+    <div class="modal fade" id="create_template_modal" tabindex="-1" role="dialog" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exampleModalLabel">Modal title</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+               <div class="form-group">
+                   <label class="sr-only" for="template_title">Title</label>
+                   <input type="text" name="template_title" id="template_title" maxlength="255" class="form-control form-control-sm" placeholder="Title">
+               </div>
+              <div class="form-group">
+                  <div class="form-group">
+                      <label class="sr-only" for="template_description">Description</label>
+                      <textarea name="description" cols="40" rows="10" id="template_description" class="form-control form-control-sm" placeholder="Description"></textarea>
+                  </div>
+              </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="save_template" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+{% endblock %}
+
+{% block Script %}
+    <script src="{% static 'js/select2.min.js' %}"></script>
+    <script src="{% static 'js/bootstrap-datepicker.min.js' %}"></script>
+    <script src="{% static 'js/jquery.formset.js' %}"></script>
+    <script>
+        $(document).ready(function () {
+            var template_data = null;
+            var patient_addr_num = '';
+            function reset_template_attrs(){
+                $('#questions_block').find('tbody').find('.dynamic-form').remove();
+            }
+            $('#gp_last_name').attr('name', 'gp_last_name');
+
+            $('#newInstructionForm tbody tr').formset({
+                'deleteText': 'X remove',
+                'addText': '+ Add Another',
+                'addCssClass': 'btn btn-primary',
+                'deleteCssClass': 'btn btn-danger'
+            });
+
+            $('#newInstructionForm').submit(function(){
+                let sel_add_conds = $('#id_addition_condition').val();
+                let titles = [];
+                for (let i = 0; i < sel_add_conds.length; i++) {
+                    titles.push($('#id_addition_condition option[value='+sel_add_conds[i]+']').text());
+                }
+                $('#id_addition_condition_title').val(titles);
+            });
+
+            $("#id_consent_form").fileinput({
+                theme: 'fas',
+                showUpload: false,
+            });
+
+            $('.radio').addClass('d-inline');
+            $('#id_common_condition').addClass('row px-2');
+            $('.checkbox').addClass('d-inline col-md-3');
+
+            $('.dob').append('<div class="input-group-prepend">\n' +
+                '    <div class="input-group-text">\n' +
+                '      <i class="fas fa-calendar-alt"></i>\n' +
+                '    </div>\n' +
+                '  </div>');
+
+            $('#id_patient_dob').datepicker({
+                format: 'dd/mm/yyyy',
+                orientation: 'bottom',
+                weekStart: 1,
+                daysOfWeekHighlighted: "6,0",
+                autoclose: true,
+                todayHighlight: true,
+            });
+            $('#id_date_range_from').datepicker({
+                format: 'dd/mm/yyyy',
+                orientation: 'bottom',
+                yearRange:"-100:2028",
+                weekStart: 1,
+                daysOfWeekHighlighted: "6,0",
+                autoclose: true,
+                todayHighlight: true,
+            });
+            $('#id_date_range_to').datepicker({
+                yearRange:"-100:2028",
+                format: 'dd/mm/yyyy',
+                orientation: 'bottom',
+                weekStart: 1,
+                daysOfWeekHighlighted: "6,0",
+                autoclose: true,
+                todayHighlight: true,
+            });
+            $('#datepicker').datepicker("setDate", new Date());
+            $('.datepicker-days .table-condensed').css('width', '231px');
+
+            $('#id_gp_practice').select2({
+                ajax: {
+                    delay: 500,
+                    url: "{% url 'organisations:nhs_autocomplete' %}",
+                    data: function (params) {
+                        let query = {
+                            search: params.term,
+                        };
+                        return query;
+                    },
+                    processResults: function (data) {
+                        return {
+                            results: data.items
+                        }
+                    }
+                }
+            });
+
+            $('#id_template').select2({
+                ajax: {
+                    delay: 500,
+                    url: "{% url 'template:template_autocomplete' %}",
+                    data: function (params) {
+                        let query = {
+                            search: params.term,
+                        };
+                        return query;
+                    },
+                    processResults: function (data) {
+                        return {
+                            results: data
+                        }
+                    }
+                }
+            });
+            
+            //load template into the form
+            $('#id_template').on('change', function () {
+                $.ajax({
+                    url: "{% url 'template:template_data' %}",
+                    type: "GET",
+                    data: {
+                        "template_title": $("#id_template").children("option:selected").text()
+                    },
+                    dataType: 'json',
+                    success: function (data) {
+                        template_data = data;
+                    },
+                    error: function (errors) {
+                        create_alert('Unable to load a template.', 'error');
+                    }
+                })
+            });
+
+            $('#save_from_template_btn').on('click', function () {
+                reset_template_attrs();
+                if(template_data.questions){
+                    question_form_html = '';
+                    template_data.questions.forEach(function(element, index) {
+                        question_form_html += `
+                            <tr class="dynamic-form">
+                                <td>
+                                    <input type="text" value="` + element["text"] + `" name="form-`+ index + `-question" class="form-control questions_inputs" maxlength="255" id="id_form-`+ index + `-question">
+                                </td>
+                                <td><a class="btn btn-danger" href="javascript:void(0)">X remove</a></td>
+                            </tr>
+                        `;
+                    });
+                    $('#questions_block').find('tbody').prepend(question_form_html);
+                };
+
+                if(template_data.conditions){
+                    $('#id_type').find("input[name=type][value=AMRA]").prop('checked', true);
+                    $('.instructionType').trigger('change');
+                    template_data.conditions.forEach(function(element, index) {
+                        if(element['is_common_condition']){
+                            $('#id_common_condition').find("input[name=common_condition]").each(function () {
+                                var common_id = '['+parseInt(element["id"])+']';
+                                if($(this).val()==common_id){
+                                    $(this).prop('checked', true);
+                                }
+                            })
+                        } else {
+                            $('#id_addition_condition').append(new Option(element["text"], element["id"]));
+                            $('#id_addition_condition').select2('val', [element["id"]]);
+                        }
+
+                    });
+                };
+            });
+
+            $('#id_addition_condition').select2({
+                minimumInputLength: 3,
+                width: 500,
+                multiple: true,
+                ajax: {
+                    url: "{% url 'snomedct:query_snomed' %}",
+                    data: function (params) {
+                        let query = {
+                            keyword: params.term,
+                        };
+                        return query;
+                    },
+                    processResults: function (data) {
+                        return {
+                            results: data
+                        }
+                    }
+                }
+            });
+
+            if ("{{ selected_add_cond }}" != "") {
+                let add_cond = "{{ selected_add_cond|safe }}";
+                add_cond = JSON.parse(add_cond)
+                let add_cond_title = '{{ selected_add_cond_title|safe }}';
+                add_cond_title = JSON.parse(add_cond_title)
+                for (let i = 0; i < add_cond.length; i++) {
+                    let option = new Option(add_cond_title[i], add_cond[i], true, true);
+                    $('#id_addition_condition').append(option).trigger('change');    
+                }
+            }
+
+            
+            $('#id_patient_postcode').select2({
+                ajax: {
+                    url: function (params) {
+                        return "https://api.postcodes.io/postcodes/"+ params.term +"/autocomplete"
+                    },
+                    processResults: function (data) {
+                        let formed_data = [];
+                        for(let i=0; i < data['result'].length; i++){
+                            formed_data.push({'id': data['result'][i], 'text': data['result'][i]});
+                        }
+                        return {
+                            results: formed_data
+                        }
+                    }
+                }
+            });
+            $('#id_patient_postcode').prop('required', true);
+
+            var $selectAllButton = $('<button class="btn btn-default btn-xs" id="selectAllButton" type="button">Select All</button>');
+            var $deSelectAllButton = $('<button class="btn btn-default btn-xs" id="deSelectAllButton" type="button">Deselect All</button>');
+            $('#id_common_condition').append([$selectAllButton, $deSelectAllButton]);
+
+            $('#selectAllButton').on('click', function () {
+                $('.commonConditions input:checkbox').prop('checked', true);
+            });
+
+            $('#deSelectAllButton').on('click', function () {
+                $('.commonConditions input:checkbox').prop('checked', false);
+            });
+
+            $('#id_gp_practice').on('change', function () {
+                $.ajax({
+                    type: "GET",
+                    url: "{% url 'organisations:get_gporganisation_data' %}",
+                    data: {
+                        'code': $(this).val()
+                    },
+                    dataType: 'json',
+                    success: function (data) {
+                        $('#nhsData').text(
+                            data.address
+                        );
+                        $('#id_gp_practice_name').val(data.name);
+                    }
+                })
+            });
+
+            if ("{{selected_gp_code}}" != "") {
+                var option = new Option('{{selected_gp_name}}', '{{selected_gp_code}}', true, true);
+                $('#id_gp_practice').append(option).trigger('change');
+            }
+
+             $('#id_patient_postcode').on('change', function () {
+                     var url = "{% url 'instructions:api_get_address' address='Address' %}".replace('Address', $(this).val());
+                     $.ajax({
+                        type: "GET",
+                        processData: false,
+                        url: url,
+                        success: function (data) {
+
+                            var addresses = data.addresses.map(function(item){
+                                return item.split(',');
+                            });
+                            data.formattedObj = {};
+                            var formattedData = data.addresses.map(function(item) {
+                                var name = item.split(',').filter(function (s) {
+                                    addresses.push(s);
+                                    return s != ' ';
+                                }).join(',');
+                                data.formattedObj[name] = item;
+                                return name;
+                            });
+
+                            $('#id_patient_address_number').empty();
+                            $('#id_patient_address_number').select2({
+                                data: formattedData
+                             });
+                            $('#id_patient_address_number').on('select2:select', function (e) {
+                                var selected = e.params.data;
+
+                                var selectedData;
+                                if(data.formattedObj[selected.text]) {
+                                    selectedData = data.formattedObj[selected.text].split(',');
+                                }else {
+                                    selectedData = selected.text.split(',');
+
+                                }
+
+                                $('#id_patient_address_line1').val(selectedData[0]);
+                                $('#id_patient_address_line2').val(selectedData[1]);
+                                $('#id_patient_address_line3').val(selectedData[2]);
+                                $('#id_patient_city').val(selectedData[5]);
+                                $('#id_patient_country').val(selectedData[6]);
+                            });
+
+                            if (patient_addr_num) {
+                                $('#id_patient_address_number').select2('val', [patient_addr_num]);
+                                patient_addr_num = '';
+                            } else {
+                                $('#id_patient_address_number').trigger({
+                                    type: 'select2:select',
+                                    params: {
+                                        data: {text: data.addresses[0]}
+                                    }
+                                });
+                            }
+
+                        }
+                })
+            });
+
+            if ('{{patient_form.instance.patient_postcode}}' != '') {
+                var option = new Option("{{patient_form.instance.patient_postcode}}", "{{patient_form.instance.patient_postcode}}", true, true);
+                $('#id_patient_postcode').append(option).trigger('change');
+            }
+
+            if ("{{selected_gp_adr_line1}}") {
+                $('#id_patient_address_line1').val("{{selected_gp_adr_line1}}");
+            }
+            if ("{{selected_gp_adr_line2}}") {
+                $('#id_patient_address_line2').val("{{selected_gp_adr_line2}}");
+            }
+            if ("{{selected_gp_adr_line3}}") {
+                $('#id_patient_address_line3').val("{{selected_gp_adr_line3}}");
+            }
+            if ("{{selected_gp_adr_country}}") {
+                $('#id_patient_country').val("{{selected_gp_adr_country}}");
+            }
+            if ("{{selected_pat_adr_num}}") {
+                patient_addr_num = "{{selected_pat_adr_num}}";
+            }
+
+            $('.instructionType').on('change', function () {
+               if($(this).is(':checked') && $(this).val() == 'AMRA'){
+                   $('#template_modal_btn').attr('disabled', false);
+                   $('.conditions').removeClass('d-none');
+               }else if($(this).is(':checked')){
+                   $('#template_modal_btn').attr('disabled', true);
+                   $('.conditions').addClass('d-none');
+               }
+            });
+
+            if('{{scope_form.type.value}}' != 'None') {
+                $('.instructionType').trigger('change').trigger('change');
+            }
+
+            $("#template_modal_btn").click(function(){
+                $("#create_template_modal").modal();
+            });
+
+            $('#save_template').on('click', function(){
+                if($('#template_title').val() == '') {
+                    $('#template_title').addClass('is-invalid');
+                    return false;
+                } else {
+                    $('#template_title').removeClass('is-invalid');
+                }
+                if($('#template_description').val() == '') {
+                    $('#template_description').addClass('is-invalid');
+                    return false;
+                } else {
+                    $('#template_description').removeClass('is-invalid');
+                }
+
+                if($('.instructionType:checked').val() != 'AMRA'){
+                    return false;
+                }
+
+                let questions = [];
+                $(".questions_inputs").each(function (i, el) {
+                     questions.push($(el).val());
+                });
+
+                let common_conditions = [];
+                $( "input[name='common_condition']:checked" ).each(function (i, el) {
+                     common_conditions.push($(el).val());
+                });
+
+                let addition_conditions = [];
+                $( "#id_addition_condition option:selected" ).each(function (i, el) {
+                     addition_conditions.push($(el).val());
+                });
+
+                let data = {
+                    'template_title': $('#template_title').val(),
+                    'description': $('#template_description').val(),
+                    'type': $('#id_type').val(),
+                    'questions': questions,
+                    'common_condition': common_conditions,
+                    'addition_condition': addition_conditions,
+                    'csrfmiddlewaretoken': '{{csrf_token}}'
+                };
+                $.ajax({
+                    url: "{% url 'template:create_template' %}",
+                    data: data,
+                    method: 'post',
+                    success: function () {
+                        create_alert('Template has been created successfully.', 'success');
+                        $('#create_template_modal').modal('toggle');
+                    },
+                    error: function (errors) {
+                        errors = errors.responseJSON.errors;
+                        let msg = '';
+                        Object.keys(errors).forEach(function(key) {
+                            msg += errors[key].join();
+                        });
+
+                        create_alert('Template save failed. ' + msg, 'error');
+                    }
+                })
+            });
+        });
+    </script>
+
+{% endblock %}

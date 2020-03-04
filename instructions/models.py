@@ -1,0 +1,298 @@
+from django.db import models
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
+from django.core.mail import send_mail
+from common.models import TimeStampedModel
+from accounts.models import ClientUser, GeneralPracticeUser, Patient, MedidataUser, User
+from accounts import models as account_models
+from snomedct.models import SnomedConcept
+from .model_choices import *
+from django.conf import settings
+from typing import Set
+PIPELINE_INSTRUCTION_LINK = settings.PIPELINE_INSTRUCTION_LINK
+TITLE_CHOICE = account_models.TITLE_CHOICE
+
+
+class InstructionPatient(models.Model):
+    patient_user = models.ForeignKey(Patient, related_name='instruction_patients', on_delete=models.CASCADE, null=True)
+    patient_title = models.CharField(max_length=3, choices=TITLE_CHOICE, verbose_name='Title*')
+    patient_first_name = models.CharField(max_length=255, verbose_name="First name*")
+    patient_last_name = models.CharField(max_length=255, verbose_name="Last name*")
+    patient_dob = models.DateField(null=True)
+    patient_dob_day = models.CharField(max_length=10, blank=True)
+    patient_dob_month = models.CharField(max_length=10, blank=True)
+    patient_dob_year = models.CharField(max_length=10, blank=True)
+    patient_postcode = models.CharField(max_length=255, verbose_name='Postcode*')
+    patient_address_number = models.CharField(max_length=255, blank=True)
+    patient_address_line1 = models.CharField(max_length=255)
+    patient_address_line2 = models.CharField(max_length=255, blank=True)
+    patient_address_line3 = models.CharField(max_length=255, blank=True)
+    patient_city = models.CharField(max_length=255)
+    patient_country = models.CharField(max_length=255)
+    patient_nhs_number = models.CharField(max_length=10, blank=True)
+    patient_email = models.EmailField(max_length=255, blank=True)
+    patient_telephone_code = models.CharField(max_length=10, blank=True)
+    patient_telephone_mobile = models.CharField(max_length=255, blank=True)
+    patient_alternate_code = models.CharField(max_length=10, blank=True)
+    patient_alternate_phone = models.CharField(max_length=255, blank=True)
+    patient_emis_number = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Instruction Patient Information"
+
+    def __str__(self):
+        return "{first_name} {last_name} {dob}".format(
+            first_name=self.patient_first_name, last_name=self.patient_last_name, dob=self.patient_dob
+        )
+
+    def get_telephone_e164(self):
+        phone = self.get_phone_without_zero(self.patient_telephone_mobile)
+        return "+%s%s"%(self.patient_telephone_code, phone)
+
+    def get_alternate_e164(self):
+        phone = self.get_phone_without_zero(self.patient_alternate_phone)
+        return "+%s%s"%(self.patient_alternate_code, phone)
+
+    def get_phone_without_zero(self, phone):
+        if phone and phone[0] == '0':
+            phone = phone[1:]
+        return phone
+
+
+class Instruction(TimeStampedModel, models.Model):
+    client_user = models.ForeignKey(ClientUser, on_delete=models.CASCADE, verbose_name='Client', null=True)
+    gp_user = models.ForeignKey(GeneralPracticeUser, on_delete=models.CASCADE, verbose_name='GP Allocated', null=True)
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, null=True, verbose_name='Patient')
+    completed_signed_off_timestamp = models.DateTimeField(null=True, blank=True)
+    rejected_timestamp = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    rejected_note = models.TextField(blank=True)
+    rejected_reason = models.IntegerField(choices=INSTRUCTION_REJECT_TYPE, null=True, blank=True)
+    type = models.CharField(max_length=4, choices=INSTRUCTION_TYPE_CHOICES)
+    final_report_date = models.TextField(blank=True)
+    initial_monetary_value = models.FloatField(null=True, blank=True, verbose_name='Value £')
+    status = models.IntegerField(choices=INSTRUCTION_STATUS_CHOICES, default=INSTRUCTION_STATUS_NEW)
+    consent_form = models.FileField(upload_to='consent_forms', null=True, blank=True)
+    patient_information = models.OneToOneField(InstructionPatient, on_delete=models.CASCADE, verbose_name='Patient')
+    gp_title_from_client = models.CharField(max_length=5, choices=TITLE_CHOICE, blank=True)
+    gp_initial_from_client = models.CharField(max_length=20, blank=True)
+    gp_last_name_from_client = models.CharField(max_length=255, blank=True)
+
+    date_range_from = models.DateField(null=True)
+    date_range_to = models.DateField(null=True)
+
+    gp_practice_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    gp_practice_id = models.CharField(max_length=255)
+    gp_practice = GenericForeignKey('gp_practice_type', 'gp_practice_id')
+    sars_consent = models.FileField(upload_to='consent_forms', null=True, blank=True)
+    mdx_consent = models.FileField(upload_to='consent_forms', null=True, blank=True)
+    medical_report = models.FileField(upload_to='medical_reports', null=True, blank=True)
+    saved = models.BooleanField(default=False)
+    medi_ref = models.IntegerField(null=True, blank=True)
+    your_ref = models.CharField(max_length=80, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Instruction"
+        ordering = ('-created',)
+        permissions = (
+            ('create_sars', 'Create SARS'),
+            ('reject_amra', 'Reject AMRA'),
+            ('reject_sars', 'Reject SARS'),
+            ('process_amra', 'Process AMRA'),
+            ('process_sars', 'Process SARS'),
+            ('allocate_gp', 'Allocate to other user to process'),
+            ('sign_off_amra', 'Sign off AMRA'),
+            ('sign_off_sars', 'Sign off SARS'),
+            ('view_completed_amra', 'View completed AMRA'),
+            ('view_completed_sars', 'View completed SARS')
+        )
+
+    def __str__(self):
+        return 'Instruction #{pk}'.format(pk=self.pk)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.medi_ref:
+            self.medi_ref = settings.MEDI_REF_NUMBER + self.pk
+            self.save()
+
+    def in_progress(self, context):
+        self.status = INSTRUCTION_STATUS_PROGRESS
+        if not self.gp_user:
+            self.gp_user = context.get('gp_user', None)
+        self.save()
+
+    def reject(self, request, context):
+        self.gp_user = request.user.userprofilebase.generalpracticeuser
+        self.rejected_timestamp = timezone.now()
+        self.rejected_by = request.user
+        self.rejected_reason = context.get('rejected_reason', None)
+        self.rejected_note = context.get('rejected_note', '')
+        self.status = INSTRUCTION_STATUS_REJECT
+        patient_email = context.get('reject_patient_email', '')
+        if patient_email != '':
+            self.send_reject_email_to_patient(patient_email)
+        if self.client_user:
+            self.send_reject_email([self.client_user.user.email])
+        if self.gp_user and self.gp_user.role == GeneralPracticeUser.OTHER_PRACTICE:
+            emails = [medi.user.email for medi in MedidataUser.objects.all()]
+            self.send_reject_email(emails)
+        self.save()
+
+    def send_reject_email_to_patient(self, patient_email):
+        send_mail(
+            'Rejected Instruction',
+            'Unfortunately your instruction could not be completed on this occasion. Please contact your GP Surgery for more information',
+            'MediData',
+            patient_email,
+            fail_silently=True,
+            auth_user=settings.EMAIL_HOST_USER,
+            auth_password=settings.EMAIL_HOST_PASSWORD,
+        )
+    
+    def send_reject_email(self, to_email):
+        send_mail(
+            'Rejected Instruction',
+            'You have a rejected instruction. Click here {link}?status=4&type=allType to see it.'.format(link=PIPELINE_INSTRUCTION_LINK),
+            'MediData',
+            to_email,
+            fail_silently=True,
+            auth_user=settings.EMAIL_HOST_USER,
+            auth_password=settings.EMAIL_HOST_PASSWORD,
+        )
+
+    def snomed_concepts_ids_and_readcodes(self) -> Set[int]:
+        snomed_concepts_ids = set()
+        readcodes = set()
+        for sct in self.selected_snomed_concepts():
+            snomed_descendants = sct.descendants(ret_descendants=set())
+
+            snomed_concepts_ids.update(
+                map(lambda sc: sc.external_id, snomed_descendants)
+            )
+
+            readcodes.update(
+                map(lambda rc: rc.ext_read_code, sct.descendant_readcodes(snomed_descendants))
+            )
+        return snomed_concepts_ids, readcodes
+
+    def readcodes(self) -> Set[str]:
+        readcodes = set()
+        for sct in self.selected_snomed_concepts():
+            readcodes.update(
+                map(lambda rc: rc.ext_read_code, sct.descendant_readcodes())
+            )
+        return readcodes
+
+    def selected_snomed_concepts(self):
+        return SnomedConcept.objects.filter(
+            instructionconditionsofinterest__instruction=self.id
+        )
+
+    def get_type(self):
+        return self.type
+
+    def is_sars(self):
+        return self.type == SARS_TYPE
+
+    def is_amra(self):
+        return self.type == AMRA_TYPE
+
+    def get_type(self):
+        return self.type
+
+
+class InstructionAdditionQuestion(models.Model):
+    instruction = models.ForeignKey(Instruction, on_delete=models.CASCADE, related_name='addition_questions')
+    question = models.CharField(max_length=255, blank=True)
+    response_mandatory = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Instruction Addition Question"
+
+    def __str__(self):
+        return self.question
+
+
+class InstructionAdditionAnswer(models.Model):
+    question = models.OneToOneField(InstructionAdditionQuestion, on_delete=models.CASCADE)
+    answer = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Instruction Addition Answer"
+
+    def __str__(self):
+        return self.answer
+
+
+class InstructionConditionsOfInterest(models.Model):
+    instruction = models.ForeignKey(Instruction, on_delete=models.CASCADE)
+    snomedct = models.ForeignKey(SnomedConcept, on_delete=models.CASCADE, null=True)
+
+    class Meta:
+        verbose_name = "Instruction Conditions Of Interest"
+
+    def __str__(self):
+        return "{} ({})".format(self.snomedct.fsn_description, self.snomedct.external_id)
+
+
+class Setting(models.Model):
+    consent_form = models.FileField(upload_to='consent_forms', null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.__class__.objects.exclude(id=self.id).delete()
+        super(Setting, self).save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        try:
+            return cls.objects.get()
+        except cls.DoesNotExist:
+            return cls()
+
+
+class ClientNote(models.Model):
+    note = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.note
+
+
+class InstructionClientNote(models.Model):
+    instruction = models.ForeignKey(Instruction, on_delete=models.CASCADE, related_name='client_notes')
+    note = models.CharField(max_length=255)
+    created_date = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = "Instruction Client Note"
+
+    def __str__(self):
+        return self.note
+
+
+class InstructionReminder(models.Model):
+    instruction = models.ForeignKey(Instruction, on_delete=models.CASCADE, related_name='reminders')
+    note = models.CharField(max_length=255)
+    created_date = models.DateTimeField(auto_now_add=True)
+    reminder_day = models.IntegerField()
+
+    class Meta:
+        verbose_name = "Instruction Reminder"
+
+    def __str__(self):
+        return self.note
+
+
+class InstructionInternalNote(models.Model):
+    instruction = models.ForeignKey(Instruction, on_delete=models.CASCADE, related_name='internal_notes')
+    note = models.TextField()
+    created_date = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = "Instruction Internal Note"
+
+    def __str__(self):
+        return self.note

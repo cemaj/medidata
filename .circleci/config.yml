@@ -1,0 +1,108 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/python:3.6.5
+      - image: circleci/postgres:10.5
+        environment:
+          POSTGRES_USER: medi
+          POSTGRES_DB: medi
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          key: medi-{{ checksum "config/requirements.txt" }}
+      - run:
+          name: Install dependencies
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r config/requirements.txt
+      - save_cache:
+          key: medi-{{ checksum "config/requirements.txt" }}
+          paths:
+            - "venv"
+      - run:
+          name: Run tests
+          command: |
+            . venv/bin/activate
+            export DJANGO_SETTINGS_MODULE="medi.settings.test_settings"
+            python manage.py test --pattern="test_*.py" --exclude-tag=notimplemented
+      - store_artifacts:
+          path: test-reports
+          destination: test-reports
+  sonarqube:
+    docker:
+      - image: circleci/node:9
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - run:
+          name: Run sonarqube
+          command: |
+            sudo npm install -g sonarqube-scanner
+            sudo sonar-scanner -Dsonar.projectKey=Medidata-$CIRCLE_BRANCH -Dsonar.projectName=MediData-$CIRCLE_BRANCH $SONAR_COMMAND
+  deploy_staging:
+    machine:
+      enable: true
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "df:14:25:0d:9a:e8:85:25:da:0e:8a:99:33:f9:24:d6"
+      - run:
+          name: Deploy staging
+          working_directory: ~/repo
+          command: |
+            ssh $STAGING_USER@$STAGING_HOST "$STAGING_COMMAND"
+      - run:
+          name: Restart server
+          working_directory: ~/repo
+          command: |
+            ssh $STAGING_USER@$STAGING_HOST "$STAGING_RESTART"
+  deploy_uat:
+    machine:
+      enable: true
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "0c:36:ab:0a:c6:dc:19:70:c4:40:32:b5:da:fc:7e:b2"
+      - run:
+          name: Deploy UAT
+          working_directory: ~/repo
+          command: |
+            ssh $UAT_USER@$UAT_HOST "$UAT_COMMAND"
+      - run:
+          name: Restart server
+          working_directory: ~/repo
+          command: |
+            ssh $UAT_USER@$UAT_HOST "$UAT_RESTART"
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - build
+      - sonarqube:
+          filters:
+            branches:
+              only:
+                - master
+                - develop
+                - test
+      - deploy_staging:
+          requires:
+            - build
+            - sonarqube
+          filters:
+            branches:
+              only:
+                - master
+                - develop
+      - deploy_uat:
+          requires:
+            - build
+            - sonarqube
+            - deploy_staging
+          filters:
+            branches:
+              only:
+                - master

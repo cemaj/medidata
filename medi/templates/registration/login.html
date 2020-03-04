@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load bootstrap4 %}
+{% load static %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+{% bootstrap_messages %}
+
+{% block ExtraHead %}
+    <link href="{% static 'css/sign-in.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block PageContent %}
+    <div class="outer">
+        <div class="middle">
+            <div class="inner text-center">
+                <img class="mt-4 mb-4 w-75" src="{% static 'images/logo/eMR_med.png' %}">
+                <form method="POST">
+                    {% csrf_token %}
+                    <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
+                    <label for="inputEmail" class="sr-only">Email address</label>
+                    {% bootstrap_form form layout='inline' %}
+                    <a href="{% url 'password_reset' %}" class="float-right mb-5">Forgot your password?</a>
+                    <button class="btn btn-lg btn-primary btn-block " type="submit">LOGIN</button>
+                    <p class="mt-5 mb-3 text-muted">&copy; 2017-2018</p>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock PageContent %}

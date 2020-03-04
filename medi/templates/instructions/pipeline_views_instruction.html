@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load instruction_templatetags %}
+{% load get_permissions %}
+{% load render_table from django_tables2 %}
+{% load bootstrap4 %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+{% bootstrap_messages %}
+
+{% block ExtraHead %}
+     <!-- Jquery DataTables -->
+    <link rel="stylesheet" href="{% static 'css/dataTables/jquery.dataTables.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/instructions/pipeline_views_instructions.css' %}">
+{% endblock %}
+
+{% block Content %}
+        <div class="row" >
+            <div class="col-md-3">
+                {% if request.user.type == 'GP' %}
+                    {% if perms.instructions.create_sars %}
+                        <a href="{% url 'instructions:new_instruction' %}" class="btn btn-primary" id="addInstructionButton">New SARS Instruction</a>
+                    {% endif %}
+                {% else %}
+                    <a href="{% url 'instructions:new_instruction' %}" class="btn btn-primary" id="addInstructionButton">New Instruction</a>
+                {% endif %}
+            </div>
+            <div class="col-md-4 offset-md-5">
+                <form id="topsearchform" role="search" method="post" action="" class="" autocomplete="off">
+                    {% csrf_token %}
+                    <input id="search" name="search" type="search" placeholder="Search" class="form-control search" required="true">
+                </form>
+            </div>
+        </div>
+        <div class="row overall-number">
+            <div class="col-md-12">
+                {% for k, v in overall_instructions_number.items %}
+                    <div class="number" id="{{ k|cut:' ' }}">
+                        <a href="#" onclick="instructionStatusFilter('{{ k }}');" class="ml-2 mr-2 mb-0">{{ k }} ({{ v }})</a>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-2">
+                <!--
+                    <select class="form-control">
+                        <option>Bulk Action</option>
+                        <option>Tiny Action</option>
+                    </select>
+                -->
+            </div>
+            <div class="col-md-3">
+                <!--{% bootstrap_button 'Apply' button_type="button" button_class="btn-primary"%} -->
+            </div>
+            <div class="col-md-2 offset-md-5">
+                <select class="form-control" id="filterInstructionType" onchange="typeFilter();">
+                    <option value="allType">All Types</option>
+                    <option value="AMRA">AMRA</option>
+                    <option value="SARS">SARS</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                {% render_table table 'django_tables2/bootstrap.html' %}
+                {% bootstrap_pagination  page=table.page pages_to_show=5 size='small' %}
+            </div>
+        </div>
+
+
+{% endblock %}
+
+{% block Script %}
+    <script src="{% static 'js/dataTables/jquery.dataTables.min.js' %}"></script>
+    <script src="{% static 'js/dataTables/dataTables.bootstrap4.min.js' %}"></script>
+    <script src="{% static 'js/instructions/instruction_views.js' %}"></script>
+    <script>
+        $(document).ready(function () {
+            $('#instructionsTable').DataTable();
+            $('.dataTables_filter, .dataTables_info, .dataTables_paginate, .dataTables_length').hide();
+            $('th.gp_practice > a').text('GP Practice');
+            $('th.gp_practice > a').click(false);
+
+            $("<li class='page-item {{ next_prev_data|keyvalue:'prev_disabled' }}'><a class='page-link'" +
+                "href='{% url 'instructions:view_pipeline' %}?page={{ next_prev_data|keyvalue:'prev_page' }}&status={{ next_prev_data|keyvalue:'status' }}&type={{ next_prev_data|keyvalue:'type' }}'>&lt;</a>/li").insertAfter('.prev');
+            $("<li class='page-item {{ next_prev_data|keyvalue:'next_disabled' }}'><a class='page-link'" +
+                "href='{% url 'instructions:view_pipeline' %}?page={{ next_prev_data|keyvalue:'next_page' }}&status={{ next_prev_data|keyvalue:'status' }}&type={{ next_prev_data|keyvalue:'type' }} '>&gt;</a></li>").insertBefore('.last');
+
+            $('input.search').on('keyup click', function () {
+                filterGlobal();
+            } );
+
+            $('.pager').hide();
+            if(getUrlParameter('status')){
+                status = getUrlParameter('status');
+                var key = getObjectKeyByValue(inst_statusDict, status);
+                $('#' + key.replace(' ', '')).css("background-color", "rgba(0, 0, 0, 0.1)");
+            } else {
+                $('#All').css("background-color", "rgba(0, 0, 0, 0.1)");
+            }
+
+            if(getUrlParameter('type')){
+                $('#filterInstructionType').val(getUrlParameter('type'));
+            }
+
+            $('.checkbox').each(function () {
+                $(this).html('<input type="checkbox">');
+            });
+
+            $("th input:checkbox").click(function(){
+                $('input:checkbox').not(this).prop('checked', this.checked);
+            });
+
+            $(".page-link").each(function () {
+                this.href = this.href + '&type=' + getUrlParameter('type') + '&status=' + getUrlParameter('status')
+            })
+        });
+    </script>
+{% endblock %}

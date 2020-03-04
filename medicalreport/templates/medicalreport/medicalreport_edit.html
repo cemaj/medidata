@@ -1,0 +1,233 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load medi_report_tags %}
+{% load bootstrap4 %}
+{% load get_permissions %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+{% bootstrap_messages %}
+
+{% block ExtraHead %}
+    <link rel="stylesheet" href="{% static 'medicalreport/css/medicalreport.css' %}">
+    <link href="{% static 'css/bootstrap-datepicker.min.css' %}" rel="stylesheet"/>
+    <link rel="stylesheet" href="{% static 'css/pretty-checkbox.min.css' %}">
+{% endblock %}
+
+{% block Content %}
+    <div class="container">
+        <div class="container-fluid callout callout--top">
+            {% patient_info %}
+        </div>
+        <h1>Provisional Report Contents</h1>
+        <form action="{% url 'medicalreport:update_report' instruction.id %}" method="post" id="medicalReportForm">
+            {% csrf_token %}
+            {% if not redaction.instruction_checked and show_alert %}
+                <div class="modal fade" id="form-modal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content sensitive-information-instructions alert-warning">
+                            <h6>Sensitive information instructions:</h6>
+                            <ul>
+                                <li>Do not include any history of sensitive conditions (e.g. sexually transmitted infections, terminations of pregnancy, domestic abuse) unless they have long term health implications and the patient consents to disclose such information.</li>
+                                <li>The signing GP must check the report for any errors and remove any references to third parties before submitting a final report.</li>
+                                <li>Do not include information about negative blood borne virus tests (HIV, Hepatitis B, Hepatitis C)./Do not include genetic test results unless there is a favourable test result stating that the patient has not inherited a condition.</li>
+                            </ul>
+                            <p>A full list of sensitive conditions (GP Summary Exclusion Code Lists) can be found<a target="_blank" href="https://isd.digital.nhs.uk/trud3/user/guest/group/0/pack/9/subpack/141/releases"> here.</a></p>
+                            <div class="inst_chk">
+                                <div class="pretty p-default right">
+                                    {{ finalise_submit_form.instruction_checked }}
+                                    <div class="state p-primary">
+                                        <label>I understand</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            <div class="row">
+                <div class="col-md-6">
+                    {% form_profile %}
+                    {% form_medications %}
+                    {% form_consultations %}
+                    {% form_referrals %}
+                </div>
+                <div class="col-md-6">
+                    {% form_significant_problems %}
+                    {% form_allergies %}
+                    {% form_bloods %}
+                    {% form_attachments %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                    {% form_addition_answers %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                    {% form_comments %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                    <h2 class="d-flex justify-content-center">Finalise and Submit</h2>
+                </div>
+                <div class="col-md-12 finalise-submit">
+                    <div class="col-md-12">
+                        <p style="margin-top: 15px">
+                            I confirm that this medical report is an accurate reflection of the information in the electronic medical records for the requested conditions
+                            of interest at the time of preparation. This report does not include undisclosed to be disclosed symptoms, future conditions, information not
+                            relevant to the sought after conditions of interest, information which the patient has not consented to be disclosed, nor information absent from
+                            the patient's electronic medical records. Information provided in this report doest not guarantee any feature state of health ot illness.
+                        </p>
+                    </div>
+                    <div class="row submit-panel">
+                        <div class="col-md-12">
+                            <div class="row ml-2">
+                                {% if request.user.id|sign_off_report:instruction.id %}
+                                    <div class="col-md-6">
+                                        {% bootstrap_field finalise_submit_form.prepared_and_signed  show_label=Fasle%}
+                                        <label class="agreement-checkbox" for="accept_disclaimer" style="font-size: large;">
+                                            <input type="checkbox" id="accept_disclaimer" class="mt-2">
+                                            <span>I accept that MediData Exchange Ltd cannot be held responsible for the content of this report as the data redaction process is approved by me, the Data Controller.</span>
+                                        </label>
+                                    </div>
+                                        {% bootstrap_field finalise_submit_form.prepared_by show_label=Fasle %}
+
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <div class="row submit-button">
+                                <div class="col-md-12">
+                                    <input type="hidden" name="event_flag" id="event_flag">
+                                    <div class="row medicalreport-date">
+                                        <div class="col-md-8 offset-4">
+                                            last updated: {{ redaction.updated_at }}
+                                        </div>
+                                    </div>
+                                    <a href="{% url 'medicalreport:final_report' instruction.id %}" class="btn btn-info" target="_blank">
+                                        VIEW REPORT
+                                    </a>
+                                    <button type="button" id="saveDraftButton" onclick="subMitMedicalReport('draft')" class="btn btn-primary"><i class="fas fa-save"></i> SAVE DRAFT</button>
+                                    {% if request.user.id|sign_off_report:instruction.id %}
+                                        <button type="button" id="submitButton" onclick="subMitMedicalReport('submit')" class="btn btn-primary btn-lg"><i class="fas fa-check"></i> SUBMIT</button>
+                                    {% endif %}
+                                    <div class="row">
+                                        <div class="col-md-9 offset-3 p-0">
+                                            <p id="last-warning">You will not be able to amend this report once submitted</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal for confirm before submit. -->
+                        <div class="modal fade" id="confirmSubmitModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-body">
+                                        <div class="container">
+                                            <div class="col-12 text-center">
+                                                <h5><strong>Are you sure you wish to submit the report ?</strong></h5>
+                                                <label>Once submitted the report cannot be edited</label>
+                                            </div>
+                                            <div class="col-12">&nbsp;</div>
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <button type="button" class="btn btn-primary btn-block" id="submitConfirmButton" onclick="submitConfirmReport('confirm')">Proceed</button>
+                                                </div>
+                                                <div class="col-6">
+                                                    <button type="button" class="btn btn-secondary btn-block" data-dismiss="modal">Go Back</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <a href="javascript:;" class="btn btn-primary" id="patient-info-open-modal">Patient Info</a>
+    <div class="patientInfo" id="patientInfo">
+        {% patient_info %}
+    </div>
+
+{% endblock %}
+
+{% block Script %}
+    <script src="{% static 'js/bootstrap-datepicker.min.js' %}"></script>
+    <script src="{% static 'medicalreport/js/medicalreport.js' %}"></script>
+    <script>
+        $("#form-modal").modal({
+            backdrop: 'static'
+        });
+        $('#id_gp_practitioner').removeAttr('required');
+
+        $('#id_prepared_and_signed_0').on('click', function () {
+            $('#id_prepared_by').val('');
+            $('#id_prepared_by').prop('readonly', true);
+        });
+
+        $('#id_prepared_and_signed_1').on('click', function () {
+            $('#id_prepared_by').prop('readonly', false);
+        });
+
+        $('#patient-info-open-modal').on('click', function () {
+           $('#patientInfo').toggle();
+        });
+
+        $('input:checkbox').on('change', function(){
+            $('input[key="' + $(this).attr('key') + '"]:checkbox').prop('checked', this.checked);
+        });
+
+        $('.finaliseChoice').css('font-size', 'large');
+
+        $('#preparer').append($('#id_prepared_by'));
+        $('#id_prepared_by').removeClass('form-control');
+        $('#id_prepared_by').css("width", "35%");
+
+        $(".update_report_btn").on('click', function(event){
+            event.preventDefault(); //prevent default action
+            saveReport();
+        });
+
+        var t_id = null;
+        $('#medicalReportForm').find('input, textarea').on('change', function () {
+            let form_save_delay = 10000;
+            // remove previews timeout
+            if(t_id){
+                clearTimeout(t_id);
+            }
+            t_id = setTimeout(function () {
+                saveReport();
+            }, form_save_delay)
+        });
+        enable_submit_button();
+        $('#id_prepared_and_signed_0').on('click', function () {
+            enable_submit_button();
+        });
+        $('#id_prepared_and_signed_1').on('click', function () {
+            enable_submit_button();
+        });
+        $('#id_prepared_by').on('change', function () {
+            enable_submit_button();
+        });
+        $('#accept_disclaimer').on('change', function () {
+            enable_submit_button();
+        });
+        $("input[type='checkbox'][name='instruction_checked']").click(function(){
+            if($(this).is(":checked")){
+                setTimeout(function(){ 
+                    $("#form-modal").modal('hide');
+                    saveReport(true);
+                }, 600);
+            }
+        });
+    </script>
+{% endblock %}
